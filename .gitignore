@@ -1,0 +1,27 @@
+# Runtime state
+lab-setup/logs/
+*.log
+*.tmp
+
+# Codex/Electron extracted app payloads
+lab-setup/codex-asar-inspect/
+*.asar.bak-auto-*
+*.asar.patched-*
+*.asar.unpacked/
+
+# Local machine state
+.codex/
+.codex-ollama/
+Codex-Ollama/
+Codex-Ollama-App/
+*.sqlite
+*.db
+auth.json
+installation_id
+
+# OS/editor noise
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
