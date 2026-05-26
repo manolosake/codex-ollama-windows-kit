@@ -533,12 +533,21 @@ try {
 
   Stop-OllamaCodexAppProcesses
   Write-Host "Abriendo Codex Desktop duplicado con perfil Ollama..."
-  Start-Process -FilePath $copyExe -ArgumentList @("--user-data-dir", $electronUserData, $root) -WorkingDirectory $root | Out-Null
+  $appOut = Join-Path $logDir ("codex-ollama-app-{0}.out.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+  $appErr = Join-Path $logDir ("codex-ollama-app-{0}.err.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+  Start-Process -FilePath $copyExe `
+    -ArgumentList @("--user-data-dir", $electronUserData, $root) `
+    -WorkingDirectory $root `
+    -RedirectStandardOutput $appOut `
+    -RedirectStandardError $appErr | Out-Null
   Start-OllamaCloseWatcher
 
   Write-Host ""
   Write-Host "Listo. Esta ventana abre la app duplicada; no cambia el perfil GPT-5.5."
   Write-Host "Al cerrar Codex Ollama, el watcher descargara la LLM y apagara el proxy local."
+  Write-Host "Logs internos de la app:"
+  Write-Host "  $appOut"
+  Write-Host "  $appErr"
   Write-Host "Para verificar que uso Ollama despues de mandar un mensaje:"
   Write-Host "  ollama ps"
   Write-Host "Para verificar el proxy rapido:"
