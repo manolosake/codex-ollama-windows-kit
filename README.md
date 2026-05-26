@@ -14,6 +14,7 @@ Seguro:
 - Configura el modelo local `fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:latest`.
 - Publica el modelo en el dropdown de Codex como modelo local.
 - Traduce tool-calls basicos entre Codex y Ollama para que el modelo pueda pedir terminal cuando Codex le expone herramientas.
+- Incluye `kali-ollama.cmd`, un operador compacto para controlar la VM Kali desde Codex Ollama con salidas JSON.
 
 Suposicion:
 
@@ -63,10 +64,17 @@ Invoke-RestMethod http://127.0.0.1:11435/health
 ollama ps
 ```
 
+Verificar Kali VM para Codex Ollama:
+
+```powershell
+.\kali-ollama.cmd status
+.\kali-ollama.cmd quickcheck
+```
+
 Resultado esperado del proxy:
 
 ```text
-version = 25
+version = 26
 default_model = fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:latest
 ```
 
@@ -100,5 +108,6 @@ Suposicion:
 - [Instalacion](docs/INSTALL-WINDOWS.md)
 - [Arquitectura](docs/ARCHITECTURE.md)
 - [Operacion](docs/OPERATIONS.md)
+- [Kali operator](docs/KALI-OPERATOR.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Notas de seguridad](docs/SECURITY.md)

@@ -32,6 +32,7 @@ Seguro:
 - El proxy vuelve a traducir la llamada para Codex como `exec_command` cuando Codex espera ese nombre.
 - El proxy oculta herramientas para saludos y conversacion corta.
 - El proxy aplica presupuesto de herramientas por turno para evitar loops.
+- Para Kali, el proxy instruye al modelo a usar `.\kali-ollama.cmd`, que devuelve JSON compacto.
 
 Suposicion:
 
@@ -41,7 +42,7 @@ Suposicion:
 ## Version actual del proxy
 
 ```text
-25
+26
 ```
 
 Cambios importantes de esta version:
@@ -52,4 +53,5 @@ Cambios importantes de esta version:
 - Tool budget para evitar vueltas infinitas.
 - Comando unico para specs de PC con JSON compacto.
 - Campo `MemoryTypeName` para no inferir tipo de RAM por velocidad.
-
+- Operador Kali (`kali-ollama.cmd`) con `status`, `start`, `run`, `quickcheck`, `tools`, `gui` y `stop`.
+- Tool-calls directos para acciones simples de Kali, sin esperar a que el modelo decida.

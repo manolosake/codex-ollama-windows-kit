@@ -20,7 +20,7 @@ const target = new URL(args.get("target") || process.env.OLLAMA_FAST_PROXY_TARGE
 const fastModel = args.get("fast-model") || args.get("model") || process.env.OLLAMA_FAST_PROXY_MODEL || "fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:latest";
 const thinkModel = args.has("think-model") ? args.get("think-model") : (process.env.OLLAMA_FAST_PROXY_THINK_MODEL || "");
 const defaultModel = fastModel;
-const version = "25";
+const version = "26";
 const legacyFastAliases = [
   "qwen36-35b-fast:latest",
   "qwen36-35b-smartfast:latest",
@@ -311,9 +311,16 @@ function isHardwareSpecsRequest(text) {
   return /\b(specs?|especificaciones|hardware|configuracion|configuración|esta compu|computadora|pc|laptop|cpu|ram|gpu|disco|storage|almacenamiento)\b/i.test(text);
 }
 
+function isKaliRequest(text) {
+  return /\b(kali|hyper-v|vm|maquina virtual|mÃ¡quina virtual|virtual machine|kali linux|kali\s+vm|laboratorio|lab|ssh|nmap|metasploit|msfconsole|burp|zap|ffuf|feroxbuster|gobuster|nuclei|sqlmap|hydra|john|hashcat)\b/i.test(text);
+}
+
 function toolBudgetFor(text) {
   if (isHardwareSpecsRequest(text)) {
     return 1;
+  }
+  if (isKaliRequest(text)) {
+    return 2;
   }
   if (/\b(a fondo|profundo|debug|depura|corrige|arregla|hasta que|tests?|pruebas?|instala|implementa|refactoriza)\b/i.test(text)) {
     return 6;
@@ -322,6 +329,20 @@ function toolBudgetFor(text) {
 }
 
 const hardwareSpecsCommand = `powershell.exe -NoProfile -NonInteractive -Command "$ErrorActionPreference='SilentlyContinue'; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $memType=@{20='DDR';21='DDR2';22='DDR2 FB-DIMM';24='DDR3';26='DDR4';30='LPDDR4';34='DDR5';35='LPDDR5'}; $o=[ordered]@{ Computer=(Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer,Model,TotalPhysicalMemory,HypervisorPresent); CPU=(Get-CimInstance Win32_Processor | Select-Object Name,Manufacturer,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed,SecondLevelAddressTranslationExtensions,VirtualizationFirmwareEnabled,VMMonitorModeExtensions); RAM=(Get-CimInstance Win32_PhysicalMemory | Select-Object Manufacturer,PartNumber,Capacity,Speed,ConfiguredClockSpeed,SMBIOSMemoryType,@{Name='MemoryTypeName';Expression={$memType[[int]$_.SMBIOSMemoryType]}}); Disks=(Get-CimInstance Win32_DiskDrive | Select-Object Model,InterfaceType,MediaType,Size,SerialNumber); GPU=(Get-CimInstance Win32_VideoController | Select-Object Name,AdapterRAM,DriverVersion,CurrentHorizontalResolution,CurrentVerticalResolution); OS=(Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,OSArchitecture); BIOS=(Get-CimInstance Win32_BIOS | Select-Object Manufacturer,SMBIOSBIOSVersion,SerialNumber); Battery=(Get-CimInstance Win32_Battery | Select-Object Name,BatteryStatus,EstimatedChargeRemaining) }; $o | ConvertTo-Json -Depth 5 -Compress"`;
+const kaliOperatorGuide = [
+  "For Kali VM work, prefer the dedicated operator from the workspace instead of raw SSH or Hyper-V commands.",
+  "Use exactly one of these commands per tool call:",
+  ".\\kali-ollama.cmd status",
+  ".\\kali-ollama.cmd start",
+  ".\\kali-ollama.cmd quickcheck",
+  ".\\kali-ollama.cmd tools",
+  ".\\kali-ollama.cmd run \"<one Kali shell command>\"",
+  ".\\kali-ollama.cmd gui",
+  ".\\kali-ollama.cmd stop",
+  "The operator returns compact JSON. Trust only that JSON and stdout/stderr from tools.",
+  "Never claim Kali, a scan, or an exploit succeeded unless the tool JSON has ok=true and the output proves the result.",
+  "For offensive security actions, operate only on the user's local lab/VM or explicitly authorized targets. If scope is missing, ask for the target instead of guessing.",
+].join("\n");
 
 function safetyResponseFor(text) {
   const normalized = String(text || "").toLowerCase();
@@ -374,6 +395,7 @@ function compactFastMessages(messages, resolved, options = {}) {
           "No more tools are available for this step.",
           "Use only the available tool outputs and answer the user directly in their language.",
           "Do not ask to run more commands. Do not invent missing hardware details; say unknown when data is absent.",
+          "For Kali VM answers, cite only observed JSON/stdout/stderr. If the tool output does not prove success, say it is not proven.",
           "For hardware answers, do not infer RAM type from speed; mention DDR/LPDDR only when MemoryTypeName is present.",
           "Do not add gaming/productivity/value judgments unless the user asks for recommendations.",
           "Do not think out loud.",
@@ -418,6 +440,7 @@ function compactFastMessages(messages, resolved, options = {}) {
             : `For PC specs or hardware configuration requests, call the shell tool exactly once using this exact command argument: ${hardwareSpecsCommand}`,
           "For hardware answers, report only fields found in tool output; do not infer RAM size, RAM type, GPU VRAM, or storage facts when missing.",
           "Do not add gaming/productivity/value judgments to hardware answers unless the user asks for recommendations.",
+          kaliOperatorGuide,
           "After tool output is returned, answer the user directly in their language.",
           "Do not think out loud.",
         ].join("\n"),

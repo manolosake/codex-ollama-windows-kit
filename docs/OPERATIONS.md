@@ -24,7 +24,7 @@ Esperado:
 
 ```text
 ok = true
-version = 25
+version = 26
 default_model = fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:latest
 ```
 
@@ -33,6 +33,26 @@ default_model = fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:lat
 ```powershell
 ollama ps
 ```
+
+## Controlar Kali desde Codex Ollama
+
+Usa el operador compacto:
+
+```powershell
+.\kali-ollama.cmd status
+.\kali-ollama.cmd start
+.\kali-ollama.cmd quickcheck
+.\kali-ollama.cmd tools
+.\kali-ollama.cmd run "whoami; uname -r"
+.\kali-ollama.cmd gui
+.\kali-ollama.cmd stop
+```
+
+Seguro:
+
+- Devuelve JSON compacto.
+- No debe inventar resultados: si `ok=false` o no hay evidencia en `stdout`, la accion no esta probada.
+- Es mejor para la LLM local que usar SSH/Hyper-V crudo.
 
 ## Apagar la LLM manualmente
 
