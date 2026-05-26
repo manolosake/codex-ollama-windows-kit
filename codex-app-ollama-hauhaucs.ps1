@@ -13,6 +13,8 @@ $proxyPort = 11435
 $proxyBaseUrl = "http://127.0.0.1:$proxyPort/v1/"
 $proxyScript = Join-Path $root "lab-setup\scripts\ollama-openai-fast-proxy.js"
 $asarPatchScript = Join-Path $root "lab-setup\scripts\patch-codex-ollama-asar.js"
+$warmupScript = Join-Path $root "lab-setup\scripts\start-ollama-model.ps1"
+$closeWatcherScript = Join-Path $root "lab-setup\scripts\watch-codex-ollama-close.ps1"
 $codexHome = Join-Path $env:USERPROFILE ".codex-ollama"
 $electronUserData = Join-Path $env:APPDATA "Codex-Ollama"
 $copyRoot = Join-Path $env:LOCALAPPDATA "Codex-Ollama-App\app"
@@ -453,6 +455,60 @@ function Ensure-OllamaFastProxy {
   throw "El proxy local de Ollama no inicio. Revisa $proxyErr"
 }
 
+function Start-OllamaModelWarmup {
+  if (-not (Test-Path -LiteralPath $warmupScript)) {
+    Write-Host "No encontre warmup script: $warmupScript"
+    return
+  }
+
+  $powershell = (Get-Command powershell.exe -ErrorAction SilentlyContinue)
+  if (-not $powershell) {
+    Write-Host "No encontre powershell.exe para precargar el modelo."
+    return
+  }
+
+  Write-Host "Precargando modelo local en segundo plano..."
+  Start-Process -FilePath $powershell.Source `
+    -ArgumentList @(
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", "`"$warmupScript`"",
+      "-Model", "`"$model`"",
+      "-OllamaBaseUrl", "`"$ollamaBaseUrl`"",
+      "-KeepAlive", "30m",
+      "-LogDir", "`"$logDir`""
+    ) `
+    -WindowStyle Hidden | Out-Null
+}
+
+function Start-OllamaCloseWatcher {
+  if (-not (Test-Path -LiteralPath $closeWatcherScript)) {
+    Write-Host "No encontre close watcher: $closeWatcherScript"
+    return
+  }
+
+  $powershell = (Get-Command powershell.exe -ErrorAction SilentlyContinue)
+  if (-not $powershell) {
+    Write-Host "No encontre powershell.exe para vigilar cierre."
+    return
+  }
+
+  Write-Host "Activando apagado automatico de la LLM al cerrar Codex Ollama..."
+  Start-Process -FilePath $powershell.Source `
+    -ArgumentList @(
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", "`"$closeWatcherScript`"",
+      "-Model", "`"$model`"",
+      "-CopyRoot", "`"$copyRoot`"",
+      "-ElectronUserData", "`"$electronUserData`"",
+      "-ProxyPort", "$proxyPort",
+      "-LogDir", "`"$logDir`"",
+      "-StopProxy"
+    ) `
+    -WindowStyle Hidden | Out-Null
+}
+
 try {
   Write-Host ""
   Write-Host "Codex App Ollama HauhauCS"
@@ -469,6 +525,7 @@ try {
   Ensure-OllamaHome
   Ensure-OllamaModelCache
   Ensure-OllamaFastProxy
+  Start-OllamaModelWarmup
 
   $env:CODEX_HOME = $codexHome
   $env:CODEX_ELECTRON_USER_DATA_PATH = $electronUserData
@@ -477,9 +534,11 @@ try {
   Stop-OllamaCodexAppProcesses
   Write-Host "Abriendo Codex Desktop duplicado con perfil Ollama..."
   Start-Process -FilePath $copyExe -ArgumentList @("--user-data-dir", $electronUserData, $root) -WorkingDirectory $root | Out-Null
+  Start-OllamaCloseWatcher
 
   Write-Host ""
-  Write-Host "Listo. Esta ventana solo abre la app duplicada; no cambia el perfil GPT-5.5."
+  Write-Host "Listo. Esta ventana abre la app duplicada; no cambia el perfil GPT-5.5."
+  Write-Host "Al cerrar Codex Ollama, el watcher descargara la LLM y apagara el proxy local."
   Write-Host "Para verificar que uso Ollama despues de mandar un mensaje:"
   Write-Host "  ollama ps"
   Write-Host "Para verificar el proxy rapido:"

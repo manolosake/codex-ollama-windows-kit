@@ -10,7 +10,9 @@ Este comando debe prender lo necesario:
 
 - Ollama server.
 - Proxy local.
+- Precarga del modelo local.
 - App duplicada de Codex.
+- Watcher de cierre para descargar la LLM al salir.
 
 ## Health check
 
@@ -27,6 +29,20 @@ default_model = fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:lat
 ```
 
 ## Ver modelo cargado
+
+```powershell
+ollama ps
+```
+
+## Apagar la LLM manualmente
+
+El watcher lo hace automaticamente al cerrar Codex Ollama. Si quieres hacerlo a mano:
+
+```powershell
+ollama stop "fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:latest"
+```
+
+Verifica:
 
 ```powershell
 ollama ps
@@ -56,4 +72,3 @@ Invoke-RestMethod -Method Post `
   -ContentType "application/json" `
   -Body $body
 ```
-

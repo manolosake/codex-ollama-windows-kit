@@ -46,7 +46,9 @@ El launcher hace desde frio:
 - Arranca Ollama si no esta corriendo.
 - Descarga el modelo si no existe.
 - Arranca el proxy local.
+- Precarga el modelo local en segundo plano.
 - Abre Codex duplicado con perfil Ollama.
+- Vigila el cierre de Codex Ollama y descarga la LLM con `ollama stop`.
 
 ## Verificar
 
@@ -81,6 +83,18 @@ Seguro:
 - El launcher de Ollama no cambia el perfil GPT normal.
 - El script GPT solo limpia valores de Ollama en `%USERPROFILE%\.codex\config.toml` y fija `gpt-5.5`.
 
+## Apagado automatico de la LLM
+
+Seguro:
+
+- Al abrir Codex Ollama, el launcher inicia Ollama/proxy y precarga el modelo en segundo plano.
+- Al cerrar todas las ventanas/procesos del clon Codex Ollama, un watcher oculto ejecuta `ollama stop` para descargar el modelo.
+- El watcher tambien apaga el proxy local del clon.
+
+Suposicion:
+
+- Si otro programa esta usando el mismo modelo de Ollama al mismo tiempo, `ollama stop` puede afectar tambien esa sesion local.
+
 ## Documentacion
 
 - [Instalacion](docs/INSTALL-WINDOWS.md)
@@ -88,4 +102,3 @@ Seguro:
 - [Operacion](docs/OPERATIONS.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Notas de seguridad](docs/SECURITY.md)
-

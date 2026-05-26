@@ -66,6 +66,29 @@ Suposicion:
 
 - En una laptop sin GPU NVIDIA, algunas respuestas pueden tardar minutos.
 
+## La LLM queda prendida despues de cerrar Codex Ollama
+
+Verifica si queda cargada:
+
+```powershell
+ollama ps
+```
+
+Apagala manualmente:
+
+```powershell
+ollama stop "fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:latest"
+```
+
+Revisa el log del watcher:
+
+```powershell
+Get-ChildItem .\lab-setup\logs\codex-ollama-close-watch-*.log |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1 |
+  Get-Content -Tail 80
+```
+
 ## Reconnecting en Codex Ollama
 
 Seguro:
@@ -78,4 +101,3 @@ Revisa:
 Invoke-RestMethod http://127.0.0.1:11435/health
 Get-Content .\lab-setup\logs\ollama-fast-proxy.err.log -Tail 80
 ```
-
