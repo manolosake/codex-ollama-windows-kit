@@ -20,7 +20,7 @@ const target = new URL(args.get("target") || process.env.OLLAMA_FAST_PROXY_TARGE
 const fastModel = args.get("fast-model") || args.get("model") || process.env.OLLAMA_FAST_PROXY_MODEL || "fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:latest";
 const thinkModel = args.has("think-model") ? args.get("think-model") : (process.env.OLLAMA_FAST_PROXY_THINK_MODEL || "");
 const defaultModel = fastModel;
-const version = "28";
+const version = "29";
 const workspaceRoot = process.cwd();
 const kaliOperatorScript = `${workspaceRoot}\\lab-setup\\scripts\\kali-operator.ps1`;
 const kaliOperatorYieldMs = 10000;
@@ -340,14 +340,42 @@ function latestUserText(messages) {
   return cleanLatestUserContent(messages[messages.length - 1]?.content || "");
 }
 
+function latestUserIndex(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "user") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function latestToolIndex(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "tool") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function messagesAfterLatestUser(messages) {
+  const index = latestUserIndex(messages);
+  return index >= 0 ? messages.slice(index + 1) : messages;
+}
+
+function hasToolHistoryAfterLatestUser(messages) {
+  return messagesAfterLatestUser(messages).some((message) => message.role === "tool" || message.tool_calls);
+}
+
 function shouldExposeTools(messages) {
   const text = latestUserText(messages).toLowerCase();
-  const toolOutputs = messages.filter((message) => message.role === "tool").length;
+  const currentTurnMessages = messagesAfterLatestUser(messages);
+  const toolOutputs = currentTurnMessages.filter((message) => message.role === "tool").length;
   const toolBudget = toolBudgetFor(text);
   if (toolOutputs >= toolBudget) {
     return false;
   }
-  if (messages.some((message) => message.role === "tool" || message.tool_calls)) {
+  if (currentTurnMessages.some((message) => message.role === "tool" || message.tool_calls)) {
     return true;
   }
   if (!text.trim()) {
@@ -498,6 +526,10 @@ function codeBlock(label, text) {
 }
 
 function staticKaliToolResponseFor(messages) {
+  const latestTool = latestToolIndex(messages);
+  if (latestTool < 0 || latestTool < latestUserIndex(messages)) {
+    return "";
+  }
   const data = parseJsonFromText(latestToolText(messages));
   if (!data || typeof data !== "object") {
     return "";
@@ -565,7 +597,7 @@ function compactFastMessages(messages, resolved, options = {}) {
   if (resolved.think) {
     return messages;
   }
-  const hasToolHistory = messages.some((message) => message.role === "tool" || message.tool_calls);
+  const hasToolHistory = hasToolHistoryAfterLatestUser(messages);
   if (!options.allowTools && hasToolHistory) {
     const recent = messages
       .filter((message) => ["user", "assistant", "tool"].includes(message.role))
@@ -767,7 +799,7 @@ function buildOllamaBody(body, messages) {
   const exposeTools = shouldExposeTools(messages);
   const convertedTools = exposeTools ? convertResponsesTools(body.tools) : [];
   const toolNames = convertedTools.map((tool) => tool.function?.name).filter(Boolean);
-  const hasToolHistory = messages.some((message) => message.role === "tool" || message.tool_calls);
+  const hasToolHistory = hasToolHistoryAfterLatestUser(messages);
   const shellTarget = originalToolNames.includes("exec_command")
     ? "exec_command"
     : (originalToolNames.includes("shell") ? "shell" : (originalToolNames.includes("shell_command") ? "shell_command" : "exec_command"));

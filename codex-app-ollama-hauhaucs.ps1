@@ -407,7 +407,7 @@ function Test-OllamaFastProxy {
     $ids = @($health.models | ForEach-Object { $_.id })
     $proxyVersion = 0
     [int]::TryParse([string]$health.version, [ref]$proxyVersion) | Out-Null
-    return ($health.ok -eq $true -and $proxyVersion -ge 28 -and $ids -contains $model)
+    return ($health.ok -eq $true -and $proxyVersion -ge 29 -and $ids -contains $model)
   } catch {
     return $false
   }
