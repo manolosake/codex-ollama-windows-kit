@@ -20,7 +20,10 @@ const target = new URL(args.get("target") || process.env.OLLAMA_FAST_PROXY_TARGE
 const fastModel = args.get("fast-model") || args.get("model") || process.env.OLLAMA_FAST_PROXY_MODEL || "fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:latest";
 const thinkModel = args.has("think-model") ? args.get("think-model") : (process.env.OLLAMA_FAST_PROXY_THINK_MODEL || "");
 const defaultModel = fastModel;
-const version = "26";
+const version = "28";
+const workspaceRoot = process.cwd();
+const kaliOperatorScript = `${workspaceRoot}\\lab-setup\\scripts\\kali-operator.ps1`;
+const kaliOperatorYieldMs = 10000;
 const legacyFastAliases = [
   "qwen36-35b-fast:latest",
   "qwen36-35b-smartfast:latest",
@@ -188,12 +191,58 @@ function responseInputToMessages(body) {
     } else if (item?.type === "function_call_output") {
       messages.push({
         role: "tool",
-        content: String(item.output || ""),
+        content: extractResponsesFunctionOutput(item),
         tool_call_id: item.call_id,
       });
     }
   }
   return messages;
+}
+
+function outputLikeToText(value) {
+  if (value == null) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const { text } = normalizeContent(value);
+    if (text) {
+      return text;
+    }
+    return value.map(outputLikeToText).filter(Boolean).join("\n");
+  }
+  if (typeof value === "object") {
+    if (typeof value.text === "string") {
+      return value.text;
+    }
+    if (typeof value.output_text === "string") {
+      return value.output_text;
+    }
+    if (typeof value.stdout === "string" || typeof value.stderr === "string") {
+      return [value.stdout, value.stderr].filter(Boolean).join("\n");
+    }
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function extractResponsesFunctionOutput(item) {
+  const candidates = [
+    item?.output,
+    item?.content,
+    item?.result,
+    item?.stdout,
+    item?.stderr,
+  ];
+  for (const candidate of candidates) {
+    const text = outputLikeToText(candidate).trim();
+    if (text) {
+      return text;
+    }
+  }
+  return "";
 }
 
 function parseJsonObject(value) {
@@ -320,7 +369,7 @@ function toolBudgetFor(text) {
     return 1;
   }
   if (isKaliRequest(text)) {
-    return 2;
+    return 1;
   }
   if (/\b(a fondo|profundo|debug|depura|corrige|arregla|hasta que|tests?|pruebas?|instala|implementa|refactoriza)\b/i.test(text)) {
     return 6;
@@ -332,17 +381,53 @@ const hardwareSpecsCommand = `powershell.exe -NoProfile -NonInteractive -Command
 const kaliOperatorGuide = [
   "For Kali VM work, prefer the dedicated operator from the workspace instead of raw SSH or Hyper-V commands.",
   "Use exactly one of these commands per tool call:",
-  ".\\kali-ollama.cmd status",
-  ".\\kali-ollama.cmd start",
-  ".\\kali-ollama.cmd quickcheck",
-  ".\\kali-ollama.cmd tools",
-  ".\\kali-ollama.cmd run \"<one Kali shell command>\"",
-  ".\\kali-ollama.cmd gui",
-  ".\\kali-ollama.cmd stop",
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${kaliOperatorScript}" status`,
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${kaliOperatorScript}" start`,
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${kaliOperatorScript}" quickcheck`,
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${kaliOperatorScript}" tools`,
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${kaliOperatorScript}" run "<one Kali shell command>"`,
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${kaliOperatorScript}" gui`,
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${kaliOperatorScript}" stop`,
+  `Use this workdir when the tool supports it: ${workspaceRoot}`,
+  `Set yield_time_ms to at least ${kaliOperatorYieldMs} so the operator can finish and return JSON in the same tool call.`,
+  "Set max_output_tokens to 12000 for Kali operator calls.",
   "The operator returns compact JSON. Trust only that JSON and stdout/stderr from tools.",
   "Never claim Kali, a scan, or an exploit succeeded unless the tool JSON has ok=true and the output proves the result.",
   "For offensive security actions, operate only on the user's local lab/VM or explicitly authorized targets. If scope is missing, ask for the target instead of guessing.",
 ].join("\n");
+
+function kaliOperatorCommand(action) {
+  return `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${kaliOperatorScript}" ${action}`;
+}
+
+function staticKaliCommandFor(text) {
+  const normalized = String(text || "").toLowerCase();
+  if (!isKaliRequest(normalized)) {
+    return "";
+  }
+  if (/\b(gui|interfaz|grafica|gráfica|vmconnect|pantalla|abre|abrir|muestra)\b/i.test(normalized)) {
+    return kaliOperatorCommand("gui");
+  }
+  if (/\b(stop|apaga|apagar|deten|detener|shutdown)\b/i.test(normalized)) {
+    return kaliOperatorCommand("stop");
+  }
+  if (/\b(restart|reinicia|reiniciar)\b/i.test(normalized)) {
+    return kaliOperatorCommand("restart");
+  }
+  if (/\b(start|prende|prender|inicia|iniciar|arranca|arrancar)\b/i.test(normalized)) {
+    return kaliOperatorCommand("start");
+  }
+  if (/\b(herramientas|tools?|instaladas|nmap|metasploit|msfconsole|ffuf|nuclei|sqlmap|hydra)\b/i.test(normalized)) {
+    return kaliOperatorCommand("tools");
+  }
+  if (/\b(quickcheck|verify|verifica|prueba|test|salud|sanity)\b/i.test(normalized)) {
+    return kaliOperatorCommand("quickcheck");
+  }
+  if (/\b(status|estado|revisa|checa|diagnostica|ip|ssh)\b/i.test(normalized)) {
+    return kaliOperatorCommand("status");
+  }
+  return "";
+}
 
 function safetyResponseFor(text) {
   const normalized = String(text || "").toLowerCase();
@@ -369,6 +454,111 @@ function identityResponseFor(text) {
 
 function staticResponseFor(text) {
   return safetyResponseFor(text) || identityResponseFor(text);
+}
+
+function latestToolText(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "tool") {
+      return String(messages[index].content || "");
+    }
+  }
+  return "";
+}
+
+function parseJsonFromText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {}
+
+  const firstBrace = raw.indexOf("{");
+  const lastBrace = raw.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    try {
+      return JSON.parse(raw.slice(firstBrace, lastBrace + 1));
+    } catch {}
+  }
+  return null;
+}
+
+function clipText(text, limit = 4000) {
+  const raw = String(text || "");
+  if (raw.length <= limit) {
+    return raw;
+  }
+  return `${raw.slice(0, limit)}\n...[truncated]`;
+}
+
+function codeBlock(label, text) {
+  const raw = clipText(text).trim();
+  return raw ? `${label}:\n\`\`\`text\n${raw}\n\`\`\`` : "";
+}
+
+function staticKaliToolResponseFor(messages) {
+  const data = parseJsonFromText(latestToolText(messages));
+  if (!data || typeof data !== "object") {
+    return "";
+  }
+  const vmName = String(data.vm_name || "");
+  if (!vmName.toLowerCase().includes("kali")) {
+    return "";
+  }
+
+  const action = String(data.action || "unknown");
+  const ok = data.ok === true;
+  const lines = [];
+  const duration = Number.isFinite(Number(data.duration_ms)) ? ` en ${data.duration_ms} ms` : "";
+
+  if (action === "status" || action === "start" || action === "stop" || action === "restart") {
+    const hyperv = data.hyperv || {};
+    lines.push(`Seguro: el operador de Kali respondio${duration} con ok=${ok}.`);
+    lines.push(`Estado Hyper-V: ${hyperv.state || "unknown"}.`);
+    lines.push(`SSH: ${data.ssh_ok ? `OK en kali@${data.ssh_ip}` : "no confirmado"}.`);
+    if (hyperv.available === true) {
+      const memory = hyperv.memory_assigned_mb != null ? `; RAM asignada ${hyperv.memory_assigned_mb} MB` : "";
+      const uptime = hyperv.uptime ? `; uptime ${hyperv.uptime}` : "";
+      lines.push(`Hyper-V disponible${memory}${uptime}.`);
+    } else if (hyperv.error) {
+      lines.push(`Hyper-V no disponible: ${hyperv.error}.`);
+    }
+    return lines.join("\n");
+  }
+
+  if (action === "gui") {
+    lines.push(`Seguro: el operador de Kali respondio${duration} con ok=${ok}.`);
+    lines.push(ok ? "Se envio la apertura de la GUI de Kali con vmconnect." : `No se pudo abrir la GUI: ${data.error || "error no especificado"}.`);
+    return lines.join("\n");
+  }
+
+  if (action === "run" || action === "quickcheck" || action === "tools") {
+    lines.push(`Seguro: el operador de Kali respondio${duration} con ok=${ok}.`);
+    if (data.ssh_target) {
+      lines.push(`SSH: ${data.ssh_target}.`);
+    }
+    if (data.command) {
+      lines.push(`Comando: ${data.command}`);
+    }
+    if (data.exit_code != null) {
+      lines.push(`Exit code: ${data.exit_code}${data.timed_out ? " (timeout)" : ""}.`);
+    }
+    const stdout = codeBlock("stdout", data.stdout);
+    const stderr = codeBlock("stderr", data.stderr);
+    if (stdout) {
+      lines.push(stdout);
+    }
+    if (stderr) {
+      lines.push(stderr);
+    }
+    if (!stdout && !stderr && data.error) {
+      lines.push(`Error: ${data.error}`);
+    }
+    return lines.join("\n");
+  }
+
+  return "";
 }
 
 function compactFastMessages(messages, resolved, options = {}) {
@@ -577,10 +767,12 @@ function buildOllamaBody(body, messages) {
   const exposeTools = shouldExposeTools(messages);
   const convertedTools = exposeTools ? convertResponsesTools(body.tools) : [];
   const toolNames = convertedTools.map((tool) => tool.function?.name).filter(Boolean);
+  const hasToolHistory = messages.some((message) => message.role === "tool" || message.tool_calls);
   const shellTarget = originalToolNames.includes("exec_command")
     ? "exec_command"
     : (originalToolNames.includes("shell") ? "shell" : (originalToolNames.includes("shell_command") ? "shell_command" : "exec_command"));
   const shellArgumentName = shellArgumentNameFor(body.tools, shellTarget);
+  const staticKaliCommand = convertedTools.length > 0 && !hasToolHistory ? staticKaliCommandFor(latestUserText(messages)) : "";
   const compactedMessages = compactFastMessages(messages, resolved, { allowTools: convertedTools.length > 0, toolNames });
   const ollamaBody = {
     model: resolved.model,
@@ -594,6 +786,12 @@ function buildOllamaBody(body, messages) {
   });
   Object.defineProperty(ollamaBody, "_proxyStaticResponse", {
     value: safetyResponseFor(latestUserText(compactedMessages)),
+    enumerable: false,
+  });
+  Object.defineProperty(ollamaBody, "_proxyStaticToolCalls", {
+    value: staticKaliCommand
+      ? [{ function: { name: "shell_command", arguments: { command: staticKaliCommand, workdir: workspaceRoot, timeout_ms: 120000, yield_time_ms: kaliOperatorYieldMs, max_output_tokens: 12000 } } }]
+      : null,
     enumerable: false,
   });
   const options = buildOptions(body, resolved, convertedTools.length > 0);
@@ -830,6 +1028,48 @@ function responsesPayloadForOutput(output, model, native = {}) {
       total_tokens: (native.prompt_eval_count || 0) + (native.eval_count || 0),
     },
   };
+}
+
+function streamFunctionCallResponse(res, model, items) {
+  const id = `resp_${Date.now()}`;
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache",
+    connection: "keep-alive",
+  });
+  writeSse(res, "response.created", { type: "response.created", response: { id, object: "response", status: "in_progress", model } });
+  items.forEach((item, index) => {
+    writeSse(res, "response.output_item.added", {
+      type: "response.output_item.added",
+      output_index: index,
+      item: { ...item, status: "in_progress", arguments: "" },
+    });
+    if (item.arguments) {
+      writeSse(res, "response.function_call_arguments.delta", {
+        type: "response.function_call_arguments.delta",
+        item_id: item.id,
+        output_index: index,
+        delta: item.arguments,
+      });
+    }
+    writeSse(res, "response.function_call_arguments.done", {
+      type: "response.function_call_arguments.done",
+      item_id: item.id,
+      output_index: index,
+      arguments: item.arguments,
+    });
+    writeSse(res, "response.output_item.done", {
+      type: "response.output_item.done",
+      output_index: index,
+      item,
+    });
+  });
+  writeSse(res, "response.completed", {
+    type: "response.completed",
+    response: responsesPayloadForOutput(items, model),
+  });
+  writeSse(res, null, "[DONE]");
+  res.end();
 }
 
 function responseFunctionCallItems(toolCalls, shellTarget = "exec_command", shellArgumentName = "cmd") {
@@ -1117,6 +1357,16 @@ async function handleResponses(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
   const messages = responseInputToMessages(body);
   const ollamaBody = buildOllamaBody(body, messages);
+  const staticToolResponse = staticKaliToolResponseFor(messages);
+  if (staticToolResponse) {
+    log(`static kali tool summary model=${ollamaBody.model} stream=${Boolean(body.stream)} chars=${staticToolResponse.length}`);
+    if (body.stream) {
+      streamStaticResponses(res, ollamaBody.model, staticToolResponse);
+      return;
+    }
+    sendJson(res, 200, responsesPayload({ message: { content: staticToolResponse } }, ollamaBody.model));
+    return;
+  }
   if (ollamaBody._proxyStaticResponse) {
     log(`static responses model=${ollamaBody.model} stream=${Boolean(body.stream)} chars=${messageChars(ollamaBody.messages)}`);
     if (body.stream) {
@@ -1124,6 +1374,16 @@ async function handleResponses(req, res) {
       return;
     }
     sendJson(res, 200, responsesPayload({ message: { content: ollamaBody._proxyStaticResponse } }, ollamaBody.model));
+    return;
+  }
+  if (ollamaBody._proxyStaticToolCalls) {
+    const items = responseFunctionCallItems(ollamaBody._proxyStaticToolCalls, ollamaBody._proxyCodexShellTool, ollamaBody._proxyCodexShellArgument);
+    log(`static tool responses model=${ollamaBody.model} stream=${Boolean(body.stream)} tools=${items.map((item) => item.name).join(",") || "-"} chars=${messageChars(ollamaBody.messages)}`);
+    if (body.stream) {
+      streamFunctionCallResponse(res, ollamaBody.model, items);
+      return;
+    }
+    sendJson(res, 200, responsesPayloadForOutput(items, ollamaBody.model));
     return;
   }
   if (ollamaBody._proxyAuxiliary) {
