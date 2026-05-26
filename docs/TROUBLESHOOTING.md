@@ -93,7 +93,7 @@ Get-ChildItem .\lab-setup\logs\codex-ollama-close-watch-*.log |
 
 Seguro:
 
-- El proxy version 26 usa heartbeats en streaming y tool-calls directos para acciones simples de Kali.
+- El proxy version 29 usa heartbeats en streaming, tool-calls directos para acciones simples de Kali y evita reutilizar salidas viejas de herramientas.
 
 Revisa:
 

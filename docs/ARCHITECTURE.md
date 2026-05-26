@@ -42,7 +42,7 @@ Suposicion:
 ## Version actual del proxy
 
 ```text
-26
+29
 ```
 
 Cambios importantes de esta version:
@@ -53,5 +53,8 @@ Cambios importantes de esta version:
 - Tool budget para evitar vueltas infinitas.
 - Comando unico para specs de PC con JSON compacto.
 - Campo `MemoryTypeName` para no inferir tipo de RAM por velocidad.
+- Operador Kali con tool-calls directos para `status`, `start`, `tools`, `quickcheck`, `gui` y `stop`.
+- Resumen determinista del JSON de Kali para reducir alucinaciones.
+- Historial de herramientas limitado al turno actual para no reutilizar salidas viejas.
 - Operador Kali (`kali-ollama.cmd`) con `status`, `start`, `run`, `quickcheck`, `tools`, `gui` y `stop`.
 - Tool-calls directos para acciones simples de Kali, sin esperar a que el modelo decida.

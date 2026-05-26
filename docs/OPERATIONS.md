@@ -24,7 +24,7 @@ Esperado:
 
 ```text
 ok = true
-version = 26
+version = 29
 default_model = fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:latest
 ```
 
